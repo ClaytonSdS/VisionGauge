@@ -15,6 +15,7 @@ pd.options.display.width = 0
 # FLAG DE ZOOM
 # ======================================================
 Adjust_Zoom = False 
+PLOT_RESULTS = False
 print("Adjust_Zoom =", Adjust_Zoom)
 
 # ======================================================
@@ -85,16 +86,18 @@ def zoom_out_to_size(img, xmin, ymin, xmax, ymax, target=120):
 # ======================================================
 Segmentation = YOLO("models/SegARC_v04_lr0.0001_5k/weights/best.pt")
 
-Regressor_Resnet = NDM("resnet").load_model(r"models\RegArc\Resnet\resnet\014_resnet_120x120_2025_12_12_HashSplit_Unfreeze_NoHead_ADAMW_retrained.pth")
-Regressor_EF1 = NDM("efficientnet_lite").load_model(r"models\RegArc\Resnet\MIX\efficientnet_lite_120x120_2025_12_01_HashSplit_UnfreezeAll_NoHead_ADAMW.pth")
+# Regressor_Resnet = NDM("resnet").load_model(r"models\RegArc\Resnet\resnet\014_resnet_120x120_2025_12_12_HashSplit_Unfreeze_NoHead_ADAMW_retrained.pth")
+# Regressor_EF1 = NDM("efficientnet_lite").load_model(r"models\RegArc\Resnet\MIX\efficientnet_lite_120x120_2025_12_01_HashSplit_UnfreezeAll_NoHead_ADAMW.pth")
+
+Regressor_Resnet = NDM("efficientnet_lite").load_model(r"models\RegArc\EfficientNet_678\efficientnet_lite_120x120.pth")
+Regressor_EF1 = NDM("efficientnet_lite").load_model(r"models\RegArc\EfficientNet_678\efficientnet_lite_120x120.pth")
 Regressor_EF2 = NDM("efficientnet_lite").load_model(r"models\RegArc\EfficientNet_678\efficientnet_lite_120x120.pth")
 
 # ======================================================
 # PIPELINE
 # ======================================================
-paths = [
-    r"dataset\testing\processed\image_test_570.png",
-]
+paths = [r"dataset\testing\processed\image_test_570.png"]
+paths = paths = pd.read_csv(r"dataset\testing\dataset_testing_paths.csv")['file'].tolist()
 
 out = Segmentation.predict(paths, conf=0.5)
 
@@ -161,75 +164,65 @@ for boxes in boxes_list:
         df_localizer.loc[row_indices[i], "pred_height_cm"] = float(preds_resnet[i])
 
     # ==================================================
-    # PLOT 1x4
-    # ==================================================
-    fig, axs = plt.subplots(1, 3, figsize=(24, 6))
+    # PLOT
+    if PLOT_RESULTS:
+        fig, axs = plt.subplots(1, 3, figsize=(24, 6))
 
-    for ax in axs:
-        ax.imshow(cv2.cvtColor(img_full, cv2.COLOR_BGR2RGB))
-        ax.axis("off")
+        for ax in axs:
+            ax.imshow(cv2.cvtColor(img_full, cv2.COLOR_BGR2RGB))
+            ax.axis("off")
 
-    axs[0].set_title("ResNet")
-    axs[1].set_title("EffNet-Lite 1")
-    axs[2].set_title("EffNet-Lite 2")
+        axs[0].set_title("ResNet")
+        axs[1].set_title("EffNet-Lite 1")
+        axs[2].set_title("EffNet-Lite 2")
 
-    bbox_info = []
+        bbox_info = []
 
-    for i in range(n_boxes):
-        xmin = int(df_localizer.loc[row_indices[i], "box_xmin"])
-        ymin = int(df_localizer.loc[row_indices[i], "box_ymin"])
-        xmax = int(df_localizer.loc[row_indices[i], "box_xmax"])
-        ymax = int(df_localizer.loc[row_indices[i], "box_ymax"])
+        for i in range(n_boxes):
+            xmin = int(df_localizer.loc[row_indices[i], "box_xmin"])
+            ymin = int(df_localizer.loc[row_indices[i], "box_ymin"])
+            xmax = int(df_localizer.loc[row_indices[i], "box_xmax"])
+            ymax = int(df_localizer.loc[row_indices[i], "box_ymax"])
 
-        bw = xmax - xmin
-        bh = ymax - ymin
-        bbox_info.append(f"{bw}x{bh}")
+            bw = xmax - xmin
+            bh = ymax - ymin
+            bbox_info.append(f"{bw}x{bh}")
 
-        values = [
-            float(preds_resnet[i]),
-            float(preds_ef1[i]),
-            float(preds_ef2[i]),
-        ]
+            values = [
+                float(preds_resnet[i]),
+                float(preds_ef1[i]),
+                float(preds_ef2[i]),
+            ]
 
-        labels = [
-            f"ResNet: {values[0]:.2f} ({Regressor_Resnet.ckpt['best_val_loss']:.2f})", # Regressor_EF1
-            f"EF1: {values[1]:.2f} ({Regressor_EF1.ckpt['best_val_loss']:.2f})",
-            f"EF2: {values[2]:.2f} ({Regressor_EF2.ckpt['best_val_loss']:.2f})",
-        ]
+            labels = [
+                f"ResNet: {values[0]:.2f} ({Regressor_Resnet.ckpt['best_val_loss']:.2f})", # Regressor_EF1
+                f"EF1: {values[1]:.2f} ({Regressor_EF1.ckpt['best_val_loss']:.2f})",
+                f"EF2: {values[2]:.2f} ({Regressor_EF2.ckpt['best_val_loss']:.2f})",
+            ]
 
-        for ax, label in zip(axs, labels):
-            ax.add_patch(
-                plt.Rectangle(
-                    (xmin, ymin),
-                    bw, bh,
-                    fill=False,
-                    edgecolor='lime',
-                    linewidth=2
-                )
-            )
-            ax.text(
-                xmin,
-                ymin - 6,
-                label,
-                color='lime',
-                fontsize=10,
-                backgroundcolor='black'
-            )
+            for ax, label in zip(axs, labels):
+                ax.add_patch(plt.Rectangle( (xmin, ymin), bw, bh, fill=False, edgecolor='lime', linewidth=2))
+                ax.text(xmin,ymin - 6,label, color='lime',fontsize=10,backgroundcolor='black')
 
-    # título
-    path_parts = paths[paths_count].split("\\")
-    folder = path_parts[2].upper() if len(path_parts) > 2 else "FOLDER"
-    filename = path_parts[-1]
-    bbox_text = " | ".join(bbox_info) if bbox_info else "No boxes"
+        # título
+        path_parts = paths[paths_count].split("\\")
+        folder = path_parts[2].upper() if len(path_parts) > 2 else "FOLDER"
+        filename = path_parts[-1]
+        bbox_text = " | ".join(bbox_info) if bbox_info else "No boxes"
 
-    plt.suptitle(
-        f"{folder} | {filename} | Img: {img_w}x{img_h} | BBoxes: {bbox_text}",
-        fontsize=14
-    )
+        plt.suptitle(
+            f"{folder} | {filename} | Img: {img_w}x{img_h} | BBoxes: {bbox_text}",
+            fontsize=14
+        )
 
-    plt.tight_layout()
-    plt.show()
+        plt.tight_layout()
+        plt.show()
 
     paths_count += 1
 
-print(df_localizer)
+import os
+output_dir = r"dataset/testing"
+save_path = os.path.join(output_dir, "testing_predictions.csv")
+df_localizer.to_csv(save_path, index=False)
+
+print(f"Dataset com as previsões salvo em {save_path}")
