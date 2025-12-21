@@ -1,8 +1,8 @@
 
-UTM_Test_Dataset - v2 552_VS
+UTM_Test_Dataset - v4 904_VS
 ==============================
 
-This dataset was exported via roboflow.com on December 16, 2025 at 4:01 PM GMT
+This dataset was exported via roboflow.com on December 21, 2025 at 12:30 AM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
@@ -17,7 +17,7 @@ visit https://github.com/roboflow/notebooks
 
 To find over 100k other datasets and pre-trained models, visit https://universe.roboflow.com
 
-The dataset includes 552 images.
+The dataset includes 904 images.
 Test_dataset are annotated in folder format.
 
 The following pre-processing was applied to each image:

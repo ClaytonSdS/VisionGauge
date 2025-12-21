@@ -3,10 +3,10 @@ import cv2
 import numpy as np
 import torch
 import pandas as pd
-import matplotlib.pyplot as plt
-import albumentations as A
+from collections import OrderedDict
 from Arch import NewDirectModel_Inference as NDM
 import os
+import gc
 
 pd.options.display.max_columns = None
 pd.options.display.max_colwidth = None
@@ -16,8 +16,12 @@ pd.options.display.width = 0
 # FLAGS
 # ======================================================
 Adjust_Zoom = False
-PLOT_RESULTS = False
+BATCH_SIZE = 8
 print("Adjust_Zoom =", Adjust_Zoom)
+
+use_cuda = torch.cuda.is_available()
+device = 0 if use_cuda else "cpu"
+print("Device:", "CUDA" if use_cuda else "CPU")
 
 # ======================================================
 # FUNÇÕES AUXILIARES
@@ -40,43 +44,87 @@ def zoom_out_to_size(img, xmin, ymin, xmax, ymax, target=120):
 
     if size >= target:
         crop = img[ymin:ymax, xmin:xmax]
-        square = pad_to_square_center(crop)
-        return cv2.resize(square, (target, target))
+        return cv2.resize(pad_to_square_center(crop), (target, target))
 
-    needed = target - size
-    pad = needed // 2
+    pad = (target - size) // 2
+    xmin, ymin = xmin - pad, ymin - pad
+    xmax, ymax = xmax + pad, ymax + pad
 
-    new_xmin = xmin - pad
-    new_ymin = ymin - pad
-    new_xmax = xmax + pad
-    new_ymax = ymax + pad
+    xmin, ymin = max(0, xmin), max(0, ymin)
+    xmax, ymax = min(w, xmax), min(h, ymax)
 
-    while (new_xmax - new_xmin) < target or (new_ymax - new_ymin) < target:
-        new_xmin -= 1
-        new_ymin -= 1
-        new_xmax += 1
-        new_ymax += 1
+    crop = img[ymin:ymax, xmin:xmax]
+    return cv2.resize(pad_to_square_center(crop), (target, target))
 
-    pad_left = max(0, -new_xmin)
-    pad_top = max(0, -new_ymin)
-    pad_right = max(0, new_xmax - w)
-    pad_bottom = max(0, new_ymax - h)
 
-    new_xmin = max(0, new_xmin)
-    new_ymin = max(0, new_ymin)
-    new_xmax = min(w, new_xmax)
-    new_ymax = min(h, new_ymax)
+# ======================================================
+# CACHE LRU
+# ======================================================
+class ImageCache:
+    def __init__(self, max_size=30):
+        self.cache = OrderedDict()
+        self.max_size = max_size
 
-    crop = img[new_ymin:new_ymax, new_xmin:new_xmax]
+    def get(self, path):
+        if path in self.cache:
+            self.cache.move_to_end(path)
+            return self.cache[path].copy()
 
-    crop = cv2.copyMakeBorder(
-        crop,
-        pad_top, pad_bottom, pad_left, pad_right,
-        cv2.BORDER_CONSTANT, value=(0, 0, 0)
-    )
+        img = cv2.imread(path)
+        self.cache[path] = img
 
-    crop_square = pad_to_square_center(crop)
-    return cv2.resize(crop_square, (target, target))
+        if len(self.cache) > self.max_size:
+            self.cache.popitem(last=False)
+
+        return img.copy()
+
+
+class CropCache:
+    def __init__(self, max_size=500):
+        self.cache = OrderedDict()
+        self.max_size = max_size
+
+    def get(self, img, bbox, adjust_zoom):
+        key = (*bbox, adjust_zoom)
+
+        if key in self.cache:
+            self.cache.move_to_end(key)
+            return self.cache[key].copy()
+
+        xmin, ymin, xmax, ymax = bbox
+
+        if adjust_zoom:
+            crop = zoom_out_to_size(img, xmin, ymin, xmax, ymax)
+        else:
+            crop = pad_to_square_center(img[ymin:ymax, xmin:xmax])
+
+        self.cache[key] = crop
+
+        if len(self.cache) > self.max_size:
+            self.cache.popitem(last=False)
+
+        return crop.copy()
+
+
+class PredictionCache:
+    def __init__(self, max_size=1000):
+        self.cache = OrderedDict()
+        self.max_size = max_size
+
+    def get(self, model_name, crop, predict_fn):
+        key = (model_name, hash(crop.tobytes()))
+
+        if key in self.cache:
+            self.cache.move_to_end(key)
+            return self.cache[key]
+
+        pred = predict_fn(crop)
+        self.cache[key] = pred
+
+        if len(self.cache) > self.max_size:
+            self.cache.popitem(last=False)
+
+        return pred
 
 
 # ======================================================
@@ -84,105 +132,104 @@ def zoom_out_to_size(img, xmin, ymin, xmax, ymax, target=120):
 # ======================================================
 Segmentation = YOLO("models/SegARC_v04_lr0.0001_5k/weights/best.pt")
 
-# Regressor_Resnet = NDM("resnet").load_model(r"models\RegArc\Resnet\resnet\014_resnet_120x120_2025_12_12_HashSplit_Unfreeze_NoHead_ADAMW_retrained.pth")
-# Regressor_EF1 = NDM("efficientnet_lite").load_model(r"models\RegArc\Resnet\MIX\efficientnet_lite_120x120_2025_12_01_HashSplit_UnfreezeAll_NoHead_ADAMW.pth")
-
-Regressor_Resnet = NDM("resnet").load_model(r"C:\Users\Clayton\Desktop\MODELS\Resnet\resnet_120x120.pth")
-
-Regressor_EF1 = NDM("resnet").load_model(r"C:\Users\Clayton\Desktop\MODELS\Resnet\resnet_120x120_2025_12_20_HashSplit_Unfreeze_NoHead_ADAMW_retrained.pth")
-Regressor_EF2 = NDM("efficientnet_lite").load_model(r"C:\Users\Clayton\Desktop\MODELS\efficientnet_b0\efficientnet_lite_120x120.pth")
+Regressor_Resnet = NDM("resnet").load_model(r"C:\Users\Clayton\Desktop\MODELS\Resnet\resnet_120x120_2025_12_20_HashSplit_Unfreeze_NoHead_ADAMW_retrained.pth")
 
 # ======================================================
 # PIPELINE
 # ======================================================
-paths = [r"dataset\training\resized\image_resized_9759.png"]
-
 dataframe = pd.read_csv(r"dataset\testing\dataset_testing_paths.csv")
-#paths  = dataframe['file'].tolist()
-
-out = Segmentation.predict(paths, conf=0.5)
-
-boxes_list = [out[i].boxes.xyxy.cpu().numpy() for i in range(len(out))]
+paths = dataframe["file"].tolist()
 
 df_localizer = pd.DataFrame(columns=[
-    "boxes", "path",
-    "box_xmin", "box_ymin", "box_xmax", "box_ymax", "variation",
-    "pred_height_cm", "true_height_cm"
+    "path", "variation",
+    "pred_height_cm", "true_height_cm",
+    "n_boxes"
 ])
 
-# ======================================================
-# LOOP PRINCIPAL
-# ======================================================
+image_cache = ImageCache()
+crop_cache = CropCache()
+prediction_cache = PredictionCache()
+
 paths_count = 0
 
-for boxes in boxes_list:
-    n_boxes = boxes.shape[0]
+# ======================================================
+# LOOP PRINCIPAL (YOLO EM BATCH)
+# ======================================================
+for i in range(0, len(paths), BATCH_SIZE):
+    batch_paths = paths[i:i + BATCH_SIZE]
 
-    img_full = cv2.imread(paths[paths_count])
-    img_h, img_w = img_full.shape[:2]
-
-    # TRUE LABEL DA IMAGEM
-    true_label = dataframe.loc[paths_count, 'true_height_cm']
-    variation = dataframe.loc[paths_count, 'variation']
-
-    row_indices = []
-    images_crop_120 = []
-
-    # -------------------------------
-    # Inicializa linhas (1 por bbox)
-    # -------------------------------
-    for i in range(n_boxes):
-        df_localizer.loc[len(df_localizer)] = {
-            "boxes": i,
-            "path": paths[paths_count],
-            "box_xmin": None,
-            "box_ymin": None,
-            "box_xmax": None,
-            "box_ymax": None,
-            "variation": variation,
-            "pred_height_cm": None,
-            "true_height_cm": true_label
-        }
-        row_indices.append(len(df_localizer) - 1)
-
-    # -------------------------------
-    # Crops
-    # -------------------------------
-    for i in range(n_boxes):
-        xmin, ymin, xmax, ymax = boxes[i].astype(int)
-
-        df_localizer.loc[row_indices[i],
-            ["box_xmin", "box_ymin", "box_xmax", "box_ymax"]
-        ] = [xmin, ymin, xmax, ymax]
-
-        if Adjust_Zoom:
-            crop_120 = zoom_out_to_size(img_full, xmin, ymin, xmax, ymax)
-        else:
-            crop = img_full[ymin:ymax, xmin:xmax]
-            crop_120 = pad_to_square_center(crop)
-
-        images_crop_120.append(crop_120)
-
-    # -------------------------------
-    # Predições
-    # -------------------------------
-    preds_resnet = (
-        Regressor_Resnet.predict(images_crop_120)
-        if n_boxes else np.zeros((0,), float)
+    results = Segmentation.predict(
+        source=batch_paths,
+        conf=0.5,
+        imgsz=640,
+        device=device,
+        half=use_cuda,
+        verbose=False
     )
 
-    preds_2 = (Regressor_EF1.predict(images_crop_120) if n_boxes else np.zeros((0,), float))
-    preds_3 = (Regressor_EF2.predict(images_crop_120) if n_boxes else np.zeros((0,), float))
+    for result in results:
+        path = paths[paths_count]
+        img_full = image_cache.get(path)
 
+        boxes = result.boxes.xyxy.cpu().numpy()
+        n_boxes = boxes.shape[0]
 
-    print(f"Image {paths_count + 1}/{len(paths)} - RES: {preds_resnet} - RES-RETRAINED: {preds_2} - EF: {preds_3}")
-    # -------------------------------
-    # Salva previsões
-    # -------------------------------
-    for i in range(n_boxes):
-        df_localizer.loc[row_indices[i], "pred_height_cm"] = float(preds_resnet[i])
+        true_label = dataframe.loc[paths_count, "true_height_cm"]
+        variation = dataframe.loc[paths_count, "variation"]
 
-    paths_count += 1
+        # -------------------------------------------------
+        # SEM DETECÇÃO → IGNORA
+        # -------------------------------------------------
+        if n_boxes == 0:
+            print(f"Image {paths_count + 1}/{len(paths)} - SEM DETECÇÃO")
+            paths_count += 1
+            continue
+
+        # -------------------------------------------------
+        # CROPS
+        # -------------------------------------------------
+        preds = []
+
+        for b in range(n_boxes):
+            xmin, ymin, xmax, ymax = boxes[b].astype(int)
+
+            crop = crop_cache.get(
+                img_full,
+                (xmin, ymin, xmax, ymax),
+                Adjust_Zoom
+            )
+
+            pred = prediction_cache.get(
+                model_name="resnet",
+                crop=crop,
+                predict_fn=lambda x: float(Regressor_Resnet.predict([x])[0])
+            )
+            preds.append(pred)
+
+        # -------------------------------------------------
+        # AGREGAÇÃO (MÉDIA)
+        # -------------------------------------------------
+        pred_final = float(np.mean(preds))
+
+        df_localizer.loc[len(df_localizer)] = {
+            "path": path,
+            "variation": variation,
+            "pred_height_cm": pred_final,
+            "true_height_cm": true_label,
+            "n_boxes": n_boxes
+        }
+
+        print(
+            f"Image {paths_count + 1}/{len(paths)} - "
+            f"{n_boxes} box(es) → média = {pred_final:.2f}"
+        )
+
+        paths_count += 1
+        del result
+
+    del results
+    torch.cuda.empty_cache()
+    gc.collect()
 
 # ======================================================
 # SALVAR CSV
@@ -190,14 +237,19 @@ for boxes in boxes_list:
 output_dir = r"dataset\testing"
 os.makedirs(output_dir, exist_ok=True)
 
-# abs_error
-df_localizer['abs_error'] = abs(df_localizer['pred_height_cm'] - df_localizer['true_height_cm'])            # Erro absoluto para MAE
-df_localizer['signed_error'] = (df_localizer['pred_height_cm'] - df_localizer['true_height_cm'])            # Erro para teste de subestimação / superestimação
-df_localizer['squared_error'] = df_localizer['signed_error'] ** 2                                           # Erro quadrático para RMSE
-df_localizer['relative_error_pct'] = (df_localizer['signed_error'] / df_localizer['true_height_cm']) * 100  # Erro relativo em %
+df_localizer["abs_error"] = abs(
+    df_localizer["pred_height_cm"] - df_localizer["true_height_cm"]
+)
+df_localizer["signed_error"] = (
+    df_localizer["pred_height_cm"] - df_localizer["true_height_cm"]
+)
+df_localizer["squared_error"] = df_localizer["signed_error"] ** 2
+df_localizer["relative_error_pct"] = (
+    df_localizer["signed_error"] / df_localizer["true_height_cm"]
+) * 100
 
+save_path = os.path.join(output_dir, "resnet_retrained_predictions.csv")
+df_localizer.to_csv(save_path, index=False)
 
-save_path = os.path.join(output_dir, "efficientnet_testing_predictions.csv")
-#df_localizer.to_csv(save_path, index=False)
-
-print(f"Dataset com as previsões salvo em {save_path}")
+print(f"\n✅ Dataset salvo em: {save_path}")
+print(f"Imagens processadas com detecção: {len(df_localizer)}")
