@@ -87,17 +87,18 @@ Segmentation = YOLO("models/SegARC_v04_lr0.0001_5k/weights/best.pt")
 # Regressor_Resnet = NDM("resnet").load_model(r"models\RegArc\Resnet\resnet\014_resnet_120x120_2025_12_12_HashSplit_Unfreeze_NoHead_ADAMW_retrained.pth")
 # Regressor_EF1 = NDM("efficientnet_lite").load_model(r"models\RegArc\Resnet\MIX\efficientnet_lite_120x120_2025_12_01_HashSplit_UnfreezeAll_NoHead_ADAMW.pth")
 
-Regressor_Resnet = NDM("efficientnet_lite").load_model(r"models\RegArc\EfficientNet_678\efficientnet_lite_120x120.pth")
-Regressor_EF1 = NDM("efficientnet_lite").load_model(r"models\RegArc\EfficientNet_678\efficientnet_lite_120x120.pth")
-Regressor_EF2 = NDM("efficientnet_lite").load_model(r"models\RegArc\EfficientNet_678\efficientnet_lite_120x120.pth")
+Regressor_Resnet = NDM("resnet").load_model(r"C:\Users\Clayton\Desktop\MODELS\Resnet\resnet_120x120.pth")
+
+Regressor_EF1 = NDM("resnet").load_model(r"C:\Users\Clayton\Desktop\MODELS\Resnet\resnet_120x120_2025_12_20_HashSplit_Unfreeze_NoHead_ADAMW_retrained.pth")
+Regressor_EF2 = NDM("efficientnet_lite").load_model(r"C:\Users\Clayton\Desktop\MODELS\efficientnet_b0\efficientnet_lite_120x120.pth")
 
 # ======================================================
 # PIPELINE
 # ======================================================
-paths = [r"dataset\testing\processed\image_test_570.png"]
+paths = [r"dataset\training\resized\image_resized_9759.png"]
 
 dataframe = pd.read_csv(r"dataset\testing\dataset_testing_paths.csv")
-paths  = dataframe['file'].tolist()
+#paths  = dataframe['file'].tolist()
 
 out = Segmentation.predict(paths, conf=0.5)
 
@@ -105,7 +106,7 @@ boxes_list = [out[i].boxes.xyxy.cpu().numpy() for i in range(len(out))]
 
 df_localizer = pd.DataFrame(columns=[
     "boxes", "path",
-    "box_xmin", "box_ymin", "box_xmax", "box_ymax",
+    "box_xmin", "box_ymin", "box_xmax", "box_ymax", "variation",
     "pred_height_cm", "true_height_cm"
 ])
 
@@ -121,7 +122,8 @@ for boxes in boxes_list:
     img_h, img_w = img_full.shape[:2]
 
     # TRUE LABEL DA IMAGEM
-    true_label = dataframe.loc[paths_count, 'deltaH_cm']
+    true_label = dataframe.loc[paths_count, 'true_height_cm']
+    variation = dataframe.loc[paths_count, 'variation']
 
     row_indices = []
     images_crop_120 = []
@@ -137,6 +139,7 @@ for boxes in boxes_list:
             "box_ymin": None,
             "box_xmax": None,
             "box_ymax": None,
+            "variation": variation,
             "pred_height_cm": None,
             "true_height_cm": true_label
         }
@@ -168,6 +171,11 @@ for boxes in boxes_list:
         if n_boxes else np.zeros((0,), float)
     )
 
+    preds_2 = (Regressor_EF1.predict(images_crop_120) if n_boxes else np.zeros((0,), float))
+    preds_3 = (Regressor_EF2.predict(images_crop_120) if n_boxes else np.zeros((0,), float))
+
+
+    print(f"Image {paths_count + 1}/{len(paths)} - RES: {preds_resnet} - RES-RETRAINED: {preds_2} - EF: {preds_3}")
     # -------------------------------
     # Salva previsões
     # -------------------------------
@@ -189,7 +197,7 @@ df_localizer['squared_error'] = df_localizer['signed_error'] ** 2               
 df_localizer['relative_error_pct'] = (df_localizer['signed_error'] / df_localizer['true_height_cm']) * 100  # Erro relativo em %
 
 
-save_path = os.path.join(output_dir, "testing_predictions.csv")
-df_localizer.to_csv(save_path, index=False)
+save_path = os.path.join(output_dir, "efficientnet_testing_predictions.csv")
+#df_localizer.to_csv(save_path, index=False)
 
 print(f"Dataset com as previsões salvo em {save_path}")

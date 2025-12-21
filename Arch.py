@@ -40,16 +40,10 @@ class BilateralFilter(A.ImageOnlyTransform):
 
 Transform = A.Compose([
             #A.CLAHE(clip_limit=(2, 2), p=1.0),
-            #A.CLAHE(clip_limit=(2, 2), always_apply=True, p=1.0),
+            A.CLAHE(clip_limit=(2, 2), always_apply=True, p=1.0),
             A.Resize(120, 120),
             #A.MedianBlur(blur_limit=3, p=1.0),
-            BilateralFilter(
-                diameter=3,
-                sigma_color=30,
-                sigma_space=30,
-                p=1.0
-            ),
-
+            #BilateralFilter(diameter=3,sigma_color=30,sigma_space=30, p=1.0),
             A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ToTensorV2(),
         ])
@@ -74,7 +68,6 @@ class NewDirectModel_Inference(nn.Module):
         self.to(self.device)
 
 
-
     # ---------------------------------------------------------
     # HEAD MLP
     # ---------------------------------------------------------
@@ -95,11 +88,6 @@ class NewDirectModel_Inference(nn.Module):
     # ---------------------------------------------------------
     def forward(self, x):
         x = x.to(self.device)
-
-        # ---- PRINTS DE DEBUG ----ww
-        #print("Model mode:", self.training)
-        #print("Backbone mode:", self.backbone.training)
-        # --------------------------
 
         if hasattr(self, "head") and self.head is not None:
             feats = self.backbone(x)
@@ -136,9 +124,7 @@ class NewDirectModel_Inference(nn.Module):
         self.eval()              # desativa dropout + batchnorm
         self.backbone.eval()     # garante que o backbone está em eval
         # ---------------------------------
-
         return self
-
 
 
     # ---------------------------------------------------------
@@ -184,6 +170,7 @@ class NewDirectModel_Inference(nn.Module):
     # PREDICT EM BATCH
     # ---------------------------------------------------------
     def predict(self, imgs):
+        apply_p_smoothing = False
 
         if isinstance(imgs, np.ndarray):
             imgs = [imgs]
@@ -207,30 +194,31 @@ class NewDirectModel_Inference(nn.Module):
         # APLICANDO EMA - Suavização Temporal
         # =======================================================
         # Se for batch > 1, aplico suavização em cada item
-        if preds_r1.ndim == 1:
+        if apply_p_smoothing:
+            if preds_r1.ndim == 1:
 
-            smoothed = []
-            for p in preds_r1:
+                smoothed = []
+                for p in preds_r1:
 
+                    if not hasattr(self, "prev_height"):
+                        self.prev_height = p   # inicializa
+
+                    p_smooth = 0.7 * self.prev_height + 0.3 * p
+                    self.prev_height = p_smooth
+
+                    smoothed.append(p_smooth)
+
+                preds_r1 = np.array(smoothed)
+
+            else:
+                # Caso raro: single-value array
+                p = preds_r1.item()
                 if not hasattr(self, "prev_height"):
-                    self.prev_height = p   # inicializa
-
-                p_smooth = 0.7 * self.prev_height + 0.3 * p
-                self.prev_height = p_smooth
-
-                smoothed.append(p_smooth)
-
-            preds_r1 = np.array(smoothed)
-
-        else:
-            # Caso raro: single-value array
-            p = preds_r1.item()
-            if not hasattr(self, "prev_height"):
-                self.prev_height = p
-            preds_r1 = 0.7 * self.prev_height + 0.3 * p
-            self.prev_height = preds_r1
-            preds_r1 = np.array([preds_r1])
-        # =======================================================
+                    self.prev_height = p
+                preds_r1 = 0.7 * self.prev_height + 0.3 * p
+                self.prev_height = preds_r1
+                preds_r1 = np.array([preds_r1])
+            # =======================================================
 
         return preds_r1
 
@@ -261,19 +249,3 @@ class NewDirectModel_Inference(nn.Module):
 
 
     
-
-
-
-    # ---------------------------------------------------------
-    # PREDIÇÃO ÚNICA
-    # ---------------------------------------------------------
-    def predict_single(self, img):
-        img_tensor = self.transform(image=img)["image"].unsqueeze(0).to(self.device)
-
-        self.eval()
-        self.backbone.eval()
-
-        with torch.no_grad():
-            output = self.forward(img_tensor)
-
-        return output.item()

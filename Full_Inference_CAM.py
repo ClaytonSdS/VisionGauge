@@ -4,7 +4,6 @@ import numpy as np
 import torch
 import pandas as pd
 from Arch import NewDirectModel_Inference as NDM
-from Arch import ViT_Inference as ViT
 import time
 import matplotlib.pyplot as plt
 
@@ -87,20 +86,17 @@ def zoom_out_to_size(img, xmin, ymin, xmax, ymax, target=120):
 
 # ---------------- Inicialização dos modelos ----------------
 Segmentation = YOLO("models/SegARC_v04_lr0.0001_5k/weights/best.pt")
+#Segmentation = YOLO("models/SegARC_v02/weights/best.pt")
 
-Regressor = NDM("efficientnet_lite").load_model("models\\RegArc\\MIX\\efficientnet_lite_120x120_2025_12_04_HashSplit_UnfreezeAll_NoHead_ADAMW_retrained.pth")
-
-Regressor_ResNet = NDM("resnet").load_model("models\\RegArc\\MIX\\resnet_120x120_2025_12_05_HashSplit_Unfreeze_NoHead_ADAMW.pth")
-Regressor_ResNet = NDM("resnet").load_model("models\\RegArc\\MIX\\023_resnet_120x120_2025_12_12_HashSplit_Unfreeze_NoHead_ADAMW_retrained.pth")
-
-Regressor_ViT = ViT("vit").load_model("models\\RegArc\\MIX\\vit_b_16_224x224_2025_12_07_HashSplit_Unfreeze_NoHead_ADAMW_retrained.pth")
+Regressor_Resnet = NDM("resnet").load_model(r"C:\Users\Clayton\Desktop\MODELS\Resnet\resnet_120x120.pth")
+Regressor = NDM("resnet").load_model(r"C:\Users\Clayton\Desktop\MODELS\Resnet\resnet_120x120_2025_12_20_HashSplit_Unfreeze_NoHead_ADAMW_retrained.pth")
 
 Regressor_ViT = None
 
 
 # ---------------- Webcam ----------------
 cap = cv2.VideoCapture(0)
-cap = cv2.VideoCapture("http://192.168.2.117:8080/video")
+#cap = cv2.VideoCapture("http://192.168.2.117:8080/video")
 
 if not cap.isOpened():
     raise RuntimeError("Não foi possível acessar a webcam")
@@ -119,8 +115,6 @@ while True:
 
     ret, frame = cap.read()
     frame = cv2.resize(frame, (854, 640))
-    frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-    frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
     # rotacionar o frame 90 an
     if not ret:
@@ -173,6 +167,7 @@ while True:
 
         if Adjust_Zoom:
             crop_square = zoom_out_to_size(img_full, xmin, ymin, xmax, ymax, target=120)
+
         else:
             crop_square = pad_to_square_center(crop)
 
@@ -185,16 +180,10 @@ while True:
 
     if len(images_raw) > 0:
         preds_r1 = Regressor.predict(images_raw)
-
-        if Regressor_ViT != None:
-            images_vit = [cv2.resize(img, (224, 224)) for img in images_raw]
-            preds_vit = Regressor_ViT.predict(images_vit)
-
-        preds_resnet = Regressor_ResNet.predict(images_raw)
+        preds_resnet = Regressor_Resnet.predict(images_raw)
 
     # ================= DESENHO =================
     for k, (xmin, ymin, xmax, ymax) in enumerate(valid_boxes):
-
         bw = xmax - xmin
         bh = ymax - ymin
 
@@ -202,30 +191,16 @@ while True:
         resnet_value = float(preds_resnet[k]) if len(preds_resnet) > k else 0.0
         vit_value = float(preds_vit[k]) if len(preds_vit) > k else 0.0
 
-        label = f"Resnet:{resnet_value:.1f} | R1:{r1_value:.1f} | ViT:{vit_value:.1f} | {bw}x{bh}"
+        label = f"RES:{resnet_value:.1f} | RES-RETRAINED:{r1_value:.1f} | {bw}x{bh}"
 
         print(label)
 
         cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
 
         (text_w, text_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-        cv2.rectangle(
-            frame,
-            (xmin, ymin - text_h - 10),
-            (xmin + text_w, ymin),
-            (0, 0, 0),
-            -1
-        )
+        cv2.rectangle(frame,(xmin, ymin - text_h - 10),(xmin + text_w, ymin),(0, 0, 0),-1)
 
-        cv2.putText(
-            frame,
-            label,
-            (xmin, ymin - 5),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 255, 0),
-            2
-        )
+        cv2.putText(frame, label, (xmin, ymin - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
     # ================= SUBPLOT (3 imagens) =================
     if USE_PLOT:

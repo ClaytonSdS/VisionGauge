@@ -1,0 +1,52 @@
+import os
+import pandas as pd
+
+def Folder2DataFrame(path):
+
+    # pega só as pastas do primeiro nível (ex: ['train', 'valid'])
+    folders = [
+        item for item in os.listdir(path)
+        if os.path.isdir(os.path.join(path, item))
+    ]
+
+    if len(folders) < 5:
+        print(f"Pastas encontradas: {folders}")
+
+    df = pd.DataFrame(columns=['file', 'variation','true_height_cm'])
+
+    # percorre cada pasta de primeiro nível
+    for fold in folders:
+        if fold == 'test':
+            variation = 'low'
+
+        if fold == 'valid':
+            variation = 'high'
+        
+        fold_path = os.path.join(path, fold)
+
+        # agora desce dentro dessa pasta e pega os arquivos
+        for raiz, pastas, arquivos in os.walk(fold_path):
+
+            # se tiver arquivos, eles são as imagens
+            for arquivo in arquivos:
+                caminho_imagem = os.path.join(raiz, arquivo)
+
+                # pega o rótulo a partir do nome da pasta
+                label = os.path.basename(raiz)
+
+                df.loc[len(df)] = [caminho_imagem, variation, float(label)]
+
+    return df
+
+
+df = Folder2DataFrame(r"dataset\testing\utm_test")
+
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+output_dir = os.path.join(BASE_DIR, "dataset", "testing")
+os.makedirs(output_dir, exist_ok=True)
+output_path = os.path.join(output_dir, "dataset_testing_paths.csv")
+
+df.to_csv(output_path, index=False)
+print(f"dataset_testing_paths concluido, salvo em: {output_path}")

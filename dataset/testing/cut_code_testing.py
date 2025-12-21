@@ -8,12 +8,12 @@ import re
 
 folder_path = "dataset//testing//hopper"
 save_path = "dataset//testing//processed"
-initial_number = 482
 
 my_current_dir = os.getcwd()
 folder_path = os.path.join(my_current_dir, folder_path)
 save_path = os.path.join(my_current_dir, save_path)
 
+USE_RANDOM = False
 
 target_shape = (2000, 2000) # altura, largura
 
@@ -70,25 +70,30 @@ def adjust_temperature(img, i=0):
     return out
 
 import random
+initial_number = 853
 for filename in tqdm.tqdm(os.listdir(folder_path)):
 
     img = cv2.imread(os.path.join(folder_path, filename))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img= cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-    img= cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-    img= cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    img= cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+    img= cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+    img= cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
 
-    delta_h = random.randint(-100, 10)
-    delta_x = random.randint(-20, 20)
+    delta_h = random.randint(-50, 300)
+    delta_x = random.randint(-50, 50)
     delta_crop = random.randint(-200, 700)
+
+    if not USE_RANDOM:
+        delta_crop = 0
+
 
     if count <= 9004:
         recorte = crop_bottom_center(
             adjust_temperature(img, i=0), # i > 0 -> -Temp | i < 0 -> +Temp
-            crop_h=1100 + delta_crop,
-            crop_w=1100 + delta_crop,
-            start_row=1100 + delta_h,
-            horizontal_shift= -400+ delta_x
+            crop_h=2000 + delta_crop,
+            crop_w=2000 + delta_crop,
+            start_row=500 + delta_h,
+            horizontal_shift= 100+ delta_x
         )
         # resize para 120 120
         
