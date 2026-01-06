@@ -5,8 +5,8 @@ from ultralytics import YOLO
 model_path_1 = "models/SegARC_v00/weights/best.pt"
 
 
-model_path_1 = "models/SegARC_v02/weights/best.pt"
-model_path_2 = "models/SegARC_v04_lr0.0001_5k/weights/best.pt"
+#model_path_1 = "models/SegARC_v02/weights/best.pt"
+model_path_2 = "models/SegARC_v08/weights/best.pt"
 
 # Carrega os modelos
 model_1 = YOLO(model_path_1)
@@ -39,10 +39,10 @@ while True:
     annotated_frame_2 = results_arch2[0].plot()
 
     # Adiciona títulos
-    cv2.putText(annotated_frame_1, "MODELO 1 - 1k_augmented", (20, 40),
+    cv2.putText(annotated_frame_1, "MODELO OLD", (20, 40),
                 cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
 
-    cv2.putText(annotated_frame_2, "MODELO 2 - 2k_augmented", (20, 40),
+    cv2.putText(annotated_frame_2, "MODELO NEW", (20, 40),
                 cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
 
     # Ajusta caso tenham alturas diferentes
