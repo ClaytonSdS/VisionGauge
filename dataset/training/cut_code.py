@@ -92,6 +92,33 @@ for filename in tqdm.tqdm(os.listdir(folder_path)):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img= cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
     
+<<<<<<< HEAD
+
+    if count <=130:
+        recorte = crop_bottom_center(
+            # temp=2, contrast = 1.4, brightness=5
+            adjust_image(img, temp=0, brightness=20), # [i>0 -> -Temp] | [i<0 -> +Temp]
+
+            crop_h=2000,
+            crop_w=2000,
+            start_row=530,
+            horizontal_shift=-100
+        )
+
+    if count > 130:
+        recorte = crop_bottom_center(
+            # temp=2, contrast = 1.4, brightness=5
+            adjust_image(img, temp=0, brightness=20), # [i>0 -> -Temp] | [i<0 -> +Temp]
+
+            crop_h=2000,
+            crop_w=2000,
+            start_row=530,
+            horizontal_shift=100
+        )
+
+
+
+=======
     if count < 2000:
         recorte = crop_bottom_center(
             adjust_temperature(img, i=2), # [i>0 -> -Temp] | [i<0 -> +Temp]
@@ -102,6 +129,7 @@ for filename in tqdm.tqdm(os.listdir(folder_path)):
             horizontal_shift=-100
         )
 
+>>>>>>> parent of a934b52c (dataset: update images for training and testing)
 
     recorte = cv2.resize(recorte, (1000, 1000))
 
