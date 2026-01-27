@@ -60,7 +60,7 @@ class NewDirectModel_Inference(nn.Module):
 
         self.use_head = False 
         self.unfreeze_all = unfreeze_all
-        self.image_size = (224, 224)
+        self.image_size = (120, 120)
 
         # Transformações (determinísticas)
         self.transform = transform

@@ -135,8 +135,8 @@ os.makedirs(output_dir, exist_ok=True)
 
 
 Segmentation = YOLO("models/SegARC_v08/weights/best.pt")
-Regressor_Resnet = NDM("mobilenetv3_large").load_model(r"C:\Users\Clayton\Desktop\MODELS\mobilenet_v3\LARGE_L3_H0\MobileNetV3_Large_120x120_2.pth")
-save_path = os.path.join(output_dir, "MobileNetV3_TESTE2_Predictions.csv")
+Regressor = NDM("efficientnet_b0").load_model(r"C:\Users\Clayton\Desktop\MODELS\EfficientNet-B0_120x120.pth")
+save_path = os.path.join(output_dir, "EfficientNet-B0_Predictions.csv")
 
 # ======================================================
 # PIPELINE
@@ -206,7 +206,7 @@ for i in range(0, len(paths), BATCH_SIZE):
             pred = prediction_cache.get(
                 model_name="resnet",
                 crop=crop,
-                predict_fn=lambda x: float(Regressor_Resnet.predict([x])[0])
+                predict_fn=lambda x: float(Regressor.predict([x])[0])
             )
             preds.append(pred)
 

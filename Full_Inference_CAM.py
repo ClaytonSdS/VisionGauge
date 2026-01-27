@@ -7,16 +7,9 @@ from Arch import NewDirectModel_Inference as NDM
 import time
 import matplotlib.pyplot as plt
 
-# Parallax Parameters
-n_air = 1.000293 # índice de refração do ar
-n_m = 1.53 # índice de refração do acrílico
-t = 0.1 # espessura do acrílico em cm 1mm
-d = 26 # distância entre o objeto e a lente em cm
 
 
 # ================= CONFIG =================
-USE_SMOOTHING = False  
-
 pd.options.display.max_columns = None
 pd.options.display.max_colwidth = None
 pd.options.display.width = 0
@@ -40,13 +33,13 @@ def pad_to_square_center(img):
 # ---------------- Inicialização dos modelos ----------------
 Segmentation = YOLO("models/SegARC_v08/weights/best.pt")
 
-Regressor_Resnet = NDM("resnet").load_model(r"C:\Users\Clayton\Desktop\MODELS\Resnet\resnet_120x120.pth")
-Regressor = NDM("resnet").load_model(r"C:\Users\Clayton\Desktop\MODELS\Resnet\unfreeze_last2\resnet_120x120_2026_01_11_HashSplit_Unfreeze_NoHead_ADAMW_retrained.pth")
+Regressor = NDM("resnet").load_model(r"C:\Users\Clayton\Desktop\MODELS\ResNet-18_120x120.pth")
+#Regressor_effnetv3 = NDM("efficientnet_b0").load_model(r"C:\Users\Clayton\Desktop\MODELS\efficientnet_b0\EfficientNet-B0_120x120.pth")
 
 
 # ---------------- Webcam ----------------
 cap = cv2.VideoCapture(0)
-#cap = cv2.VideoCapture("http://192.168.2.117:8080/video")
+cap = cv2.VideoCapture("http://192.168.2.117:8080/video")
 
 if not cap.isOpened():
     raise RuntimeError("Não foi possível acessar a webcam")
@@ -74,31 +67,11 @@ while True:
     img_rgb = cv2.cvtColor(img_full, cv2.COLOR_BGR2RGB)
 
     # ================= YOLO Prediction =================
-    out = Segmentation.predict(img_rgb, conf=0.5, verbose=False)[0]
+    out = Segmentation.predict(img_rgb, conf=0.6, verbose=False)[0]
     boxes = out.boxes.xyxy.cpu().numpy()
     n_boxes = boxes.shape[0]
 
-    # ================= SMOOTHING CONDICIONAL =================
-    if USE_SMOOTHING:
-        smoothed = []
-
-        for i in range(n_boxes):
-            xmin, ymin, xmax, ymax = boxes[i]
-
-            if i in smooth_boxes:
-                prev = smooth_boxes[i]
-                xmin = alpha * prev[0] + (1 - alpha) * xmin
-                ymin = alpha * prev[1] + (1 - alpha) * ymin
-                xmax = alpha * prev[2] + (1 - alpha) * xmax
-                ymax = alpha * prev[3] + (1 - alpha) * ymax
-
-            smooth_boxes[i] = (xmin, ymin, xmax, ymax)
-            smoothed.append([xmin, ymin, xmax, ymax])
-
-        boxes = np.array(smoothed).astype(int)
-
-    else:
-        boxes = boxes.astype(int)
+    boxes = boxes.astype(int)
 
     # ================= CROP + PAD =================
     images_raw = []
@@ -127,15 +100,23 @@ while True:
 
     if len(images_raw) > 0:
         preds_r1 = Regressor.predict(images_raw)
-        preds_resnet = Regressor_Resnet.predict(images_raw)
 
         hp = preds_r1
+
+        # ===================================================================
+        # Parallax Parameters
+        n_air = 1.000293 # índice de refração do ar
+        n_m = 1.53 # índice de refração do acrílico
+        t = 0.1 # espessura do acrílico em cm 1mm
+        d = 26 # distância entre o objeto e a lente em cm
+
         delta = 0.1 # 1mm de espessura do acrílico em cm
         M = 150 # 150 cm
         alpha = np.arctan((M - hp)/d)
         gama = np.arcsin(n_air/n_m * np.sin(alpha))
         delta_h = delta * np.tan(gama)
         ht = hp - delta_h
+        # ===================================================================
 
     # ================= DESENHO =================
     for k, (xmin, ymin, xmax, ymax) in enumerate(valid_boxes):
@@ -146,7 +127,6 @@ while True:
         ht_k = float(ht[k])
 
         r1_value = float(preds_r1[k])
-        resnet_value = float(preds_resnet[k])
 
         label = f"hp:{hp_k:.1f} | ht:{ht_k:.1f} | {bw}x{bh}"
 
@@ -169,3 +149,4 @@ while True:
 # ================= Cleanup =================
 cap.release()
 cv2.destroyAllWindows()
+q
