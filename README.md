@@ -1,12 +1,12 @@
 <img src="https://github.com/ClaytonSdS/VisionGauge_Files/blob/main/steps/vg.png?raw=true" alt="model" width="800"/>
 
-This work proposes a computer vision model based on the sequential implementation of machine learning models for the detection and reading of water column gauges, called VisionGauge.
+This work proposes a computer vision model based on the sequential implementation of machine learning models for the detection and reading of U-tube manometers, named VisionGauge. The solution is composed of two stages: a detector and a regressor. 
 
-The solution consists of two sequential stages: a detection model and a regression model. The architecture adopted for the detector is based on the state-of-the-art YOLOv8 model, while for the regressor, the architecture was ResNet-18, adapted for the regression task.
+The detector architecture was selected based on an evaluation among YOLOv8s, YOLO11s, and YOLO26s, while the regressor was defined through a comparative study among ResNet-18, EfficientNet-B0, MobileNetV3 Small, and MobileNetV3 Large architectures, all adapted for the regression task. 
 
-During training, custom datasets were developed, specific to the training domains of the detector, the regressor, and, finally, for the complete evaluation of the VisionGauge model in both static and streaming modes.
+Custom datasets were created for model training and for the complete evaluation of VisionGauge. 
 
-The best results composing VisionGauge were obtained with the detector model, achieving an F1-Score of 86.4%, together with the regressor architecture, which achieved an MAE of 1.872, both evaluated on the test dataset. Additionally, in the streaming mode evaluation, the model achieved an average global oscillation score (Φ) of 70%.
+The best configuration was achieved with YOLOv8s + EfficientNet-B0, reaching an F1-Score of 99.94% and an MAE of  on the test set, indicating a low regression error.
 
 ---
 <table align="center">
@@ -24,7 +24,7 @@ The best results composing VisionGauge were obtained with the detector model, ac
 <a id="top"></a>
 
 ## Contents
-- [Read the Paper](#read-the-article)
+- [Read the Paper](https://doi.org/10.23900/artefactum.v25i5.3462)
 - [How to Use](#how-to-use)
    * [PyPi Example](#pypi-example)
    * [VisionGauge API](#visiongauge-api)
